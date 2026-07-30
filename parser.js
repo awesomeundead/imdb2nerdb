@@ -1,24 +1,3 @@
-/*
-export function parseMovie(html) {
-    const match = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
-    if (!match) {
-        throw new Error('Não encontrei o JSON-LD na página. O IMDb pode ter mudado a estrutura.');
-    }
-
-    const data = JSON.parse(match[1]);
-
-    return {
-        title: data.name || null,
-        title_br: data.alternateName || data.name || null,
-        diretores: (data.director || []).map(d => d.name),
-        generos: data.genre || [],
-        release_year: data.datePublished ? Number(data.datePublished.slice(0, 4)) : null,
-        notaImdb: data.aggregateRating?.ratingValue ?? null,
-        sinopse: data.description || null
-    };
-}
-*/
-
 export function extractImdbId(url) {
     const match = url.match(/tt\d+/);
     return match ? match[0] : null;
@@ -53,9 +32,6 @@ export function parseMovie(html) {
         title_br,
         directors,
         genres,
-        release_year,
-        // bônus, já vem junto:
-        //notaImdb: atf.ratingsSummary?.aggregateRating ?? null,
-        //sinopse: atf.plot?.plotText?.plainText ?? null
+        release_year
     };
 }

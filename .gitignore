@@ -1,3 +1,5 @@
+/downloads
 /node_modules
 session.json
+urls.txt
 .env

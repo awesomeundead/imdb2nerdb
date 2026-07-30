@@ -13,6 +13,5 @@ export async function sendMovie(movieData, apiUrl, apiKey) {
         throw new Error(`Falha ao enviar (status ${response.status}): ${body}`);
     }
 
-    return await response.text();
     return response.status === 204 ? null : await response.json().catch(() => null);
 }
