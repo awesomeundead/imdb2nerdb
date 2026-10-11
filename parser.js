@@ -3,6 +3,29 @@ export function extractImdbId(url) {
     return match ? match[0] : null;
 }
 
+export function parseCast(html) {
+    const m = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+    if (!m) throw new Error('Não encontrei o __NEXT_DATA__ na página.');
+
+    const json = JSON.parse(m[1]);
+    const groups = json?.props?.pageProps?.mainColumnData?.castV2 || [];
+
+    return groups
+        .flatMap(g => g.credits || [])
+        .map(credit => {
+            const name = credit.name?.nameText?.text;
+            if (!name) return null;
+
+            const characters = (credit.creditedRoles?.edges || [])
+                .flatMap(r => r.node?.characters?.edges || [])
+                .map(c => c.node?.name)
+                .filter(Boolean);
+
+            return { name, characters: [...new Set(characters)] };
+        })
+        .filter(Boolean);
+}
+
 export function parseMovie(html) {
     const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
     if (!nextDataMatch) {
