@@ -38,8 +38,19 @@ export function parseMovie(html) {
         throw new Error('Estrutura do __NEXT_DATA__ mudou (aboveTheFoldData não encontrado).');
     }
 
-    const title_br = atf.titleText?.text || null;
-    const title = atf.originalTitleText?.text || title_br;
+    const locale = json.locale;
+
+    let title_br = '';
+    let title_us = '';
+
+    if (locale == 'pt') {
+        title_br = atf.titleText?.text || '';
+    }
+    else {
+        title_us = atf.titleText?.text || '';
+    }
+
+    const title = atf.originalTitleText?.text || null;
     const release_year = atf.releaseYear?.year || null;
 
     // Gêneros: lista completa, sem o truncamento que o JSON-LD costuma aplicar
@@ -73,8 +84,10 @@ export function parseMovie(html) {
         .filter(Boolean);
 
     return {
+        locale,
         title,
         title_br,
+        title_us,
         directors,
         genres,
         release_year,

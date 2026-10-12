@@ -4,36 +4,38 @@ import fs from "fs/promises";
 import path from "path";
 import { getMovie } from "./scraper.js";
 import { parseMovie, extractImdbId } from "./parser.js";
-import { sendCast, sendMovie } from "./sender.js";
+import { sendCast, sendMovie, patchMovie } from "./sender.js";
 
 const PORT = 3000;
 const CAST_API_URL = process.env.NERDB_CAST_API_URL;
 const MOVIE_API_URL = process.env.NERDB_MOVIE_API_URL;
+const PATCH_MOVIE_API_URL = process.env.NERDB_PATCH_MOVIE_API_URL;
 const API_KEY = process.env.NERDB_API_KEY;
 const CACHE_DIR = "./cache";
+const IMDB_LOCALE = process.env.IMDB_LOCALE || "en-US";
+const isPortuguese = IMDB_LOCALE.startsWith("pt");
 
-/**
- * Busca o filme no cache unificado ou faz o scraping se não existir.
- * O arquivo salvo em ./cache/{imdbId}.json contém tanto os dados do filme quanto o elenco.
- */
 async function getOrFetchMovie(imdbInput) {
     const imdbId = extractImdbId(imdbInput) || imdbInput;
     const cachePath = path.join(CACHE_DIR, `${imdbId}.json`);
-    const targetUrl = imdbInput.startsWith('http') ? imdbInput : `https://www.imdb.com/pt/title/${imdbId}/`;
+    
+    const defaultBaseUrl = isPortuguese 
+        ? `https://www.imdb.com/pt/title/${imdbId}/` 
+        : `https://www.imdb.com/title/${imdbId}/`;
+
+    const targetUrl = imdbInput.startsWith('http') ? imdbInput : defaultBaseUrl;
 
     try {
         const cached = JSON.parse(await fs.readFile(cachePath, "utf-8"));
-        // Valida se o cache possui os dados essenciais e o elenco
         if (cached && cached.title && Array.isArray(cached.cast)) {
             return { movie: cached, fromCache: true };
         }
     } catch {
-        // Cache não existe ou é inválido, prossegue para o scraping
+        // Cache não existe ou inválido
     }
 
     const html = await getMovie(targetUrl);
     const movieData = parseMovie(html);
-    movieData['title_us'] = '';
     movieData['imdb'] = targetUrl;
 
     if (movieData.title) {
@@ -61,7 +63,12 @@ const server = http.createServer(async (req, res) => {
         return res.end(await fs.readFile('./public/movies.html'));
     }
 
-    // Endpoint para envio de Elenco (/run)
+    if (req.method === 'GET' && req.url === '/update') {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end(await fs.readFile('./public/update.html'));
+    }
+
+    // Rota /run (Elenco)
     if (req.method === 'POST' && req.url === '/run') {
         res.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
         const send = obj => res.write(JSON.stringify(obj) + '\n');
@@ -76,9 +83,7 @@ const server = http.createServer(async (req, res) => {
             for (const { id, imdb } of items) {
                 try {
                     if (!id || !imdb) throw new Error('item sem id ou imdb');
-                    const { movie, fromCache } = await getOrFetchMovie(imdb);
-                    
-                    // Converte o formato de elenco do cache unificado para o formato esperado pelo sendCast, se necessário
+                    const { movie } = await getOrFetchMovie(imdb);
                     const cast = (movie.cast || []).map(c => ({
                         name: c.actor,
                         characters: c.character ? c.character.split(' / ') : []
@@ -86,7 +91,7 @@ const server = http.createServer(async (req, res) => {
 
                     if (!cast.length) throw new Error('elenco vazio');
                     if (!dryRun) await sendCast(id, cast, CAST_API_URL, API_KEY);
-                    send({ id, imdb, ok: true, fromCache, count: cast.length, cast: dryRun ? cast : undefined });
+                    send({ id, imdb, ok: true, count: cast.length });
                 } catch (err) {
                     send({ id, imdb, ok: false, error: err.message });
                 }
@@ -97,7 +102,7 @@ const server = http.createServer(async (req, res) => {
         return res.end();
     }
 
-    // Endpoint para envio de Filmes (/run-movies)
+    // Rota /run-movies (Filmes)
     if (req.method === 'POST' && req.url === '/run-movies') {
         res.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
         const send = obj => res.write(JSON.stringify(obj) + '\n');
@@ -107,7 +112,7 @@ const server = http.createServer(async (req, res) => {
             const parsed = typeof json === 'string' ? JSON.parse(json) : json;
             const items = Array.isArray(parsed) ? parsed : parsed.items;
             if (!Array.isArray(items)) throw new Error('JSON precisa ter "items" (array).');
-            if (!dryRun && (!API_KEY || !MOVIE_API_URL)) throw new Error('NERDB_API_KEY / NERDB_API_URL não definidas no .env.');
+            if (!dryRun && (!API_KEY || !MOVIE_API_URL)) throw new Error('NERDB_API_KEY / NERDB_MOVIE_API_URL não definidas no .env.');
 
             for (const item of items) {
                 try {
@@ -115,21 +120,51 @@ const server = http.createServer(async (req, res) => {
                     if (!imdbRef) throw new Error('item sem imdb ou url');
                     const imdbId = extractImdbId(imdbRef) || imdbRef;
 
-                    const { movie, fromCache } = await getOrFetchMovie(imdbRef);
+                    const { movie } = await getOrFetchMovie(imdbRef);
                     if (!movie || !movie.title) throw new Error('dados do filme vazios');
                     
                     if (!dryRun) await sendMovie(movie, MOVIE_API_URL, API_KEY);
-                    send({ 
-                        imdb: imdbId, 
-                        ok: true, 
-                        fromCache, 
-                        title: movie.title, 
-                        release_year: movie.release_year, 
-                        genres: movie.genres, 
-                        movie: dryRun ? movie : undefined 
-                    });
+                    send({ imdb: imdbId, ok: true, title: movie.title });
                 } catch (err) {
                     send({ imdb: item.imdb || item.url || item, ok: false, error: err.message });
+                }
+            }
+        } catch (err) {
+            send({ ok: false, error: err.message });
+        }
+        return res.end();
+    }
+
+    // Rota /run-update (PATCH updates em lote)
+    if (req.method === 'POST' && req.url === '/run-update') {
+        res.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
+        const send = obj => res.write(JSON.stringify(obj) + '\n');
+
+        try {
+            const { json, dryRun } = JSON.parse(await readBody(req));
+            const parsed = typeof json === 'string' ? JSON.parse(json) : json;
+            const items = Array.isArray(parsed) ? parsed : parsed.items;
+            if (!Array.isArray(items)) throw new Error('JSON precisa ter "items" (array).');
+            if (!dryRun && (!API_KEY || !PATCH_MOVIE_API_URL)) throw new Error('NERDB_API_KEY / NERDB_PATCH_MOVIE_API_URL não definidas no .env.');
+
+            for (const item of items) {
+                try {
+                    const imdbRef = item.imdb || item.url || item;
+                    if (!imdbRef) throw new Error('item sem imdb ou url');
+
+                    const { movie } = await getOrFetchMovie(imdbRef);
+                    if (!movie || !movie.title) throw new Error('dados do filme vazios');
+                    const id = item.id;
+                    const data = {};
+                    const index = parsed.problem.replace(/^no_/, "");
+
+                    data[index] = movie[index];
+
+                    if (!dryRun) await patchMovie(id, data, PATCH_MOVIE_API_URL, API_KEY);
+                    //send({ imdb: imdbId, ok: true, title: movie.title });
+                    send({ id, ok: true, payload: dryRun ? data : undefined });
+                } catch (err) {
+                    send({ id: item.id || null, ok: false, error: err.message });
                 }
             }
         } catch (err) {

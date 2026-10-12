@@ -30,8 +30,8 @@ export async function processMovie(targetUrl) {
         } catch {
             const result = await getMovie(targetUrl);
             movieData = parseMovie(result);
-            movieData['title_us'] = '';
             movieData['imdb'] = targetUrl;
+            
             await fs.writeFile(jsonPath, JSON.stringify(movieData, null, 2), 'utf-8');
 
             console.log('\n📋 Dados extraídos:', movieData);

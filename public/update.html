@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>imdb2nerdb · atualizar filme</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+    textarea { width: 100%; height: 200px; font-family: monospace; }
+    pre { background: #111; color: #ddd; padding: 1rem; min-height: 120px; overflow: auto; }
+    .ok { color: #6c6; } .err { color: #f66; }
+  </style>
+</head>
+<body>
+  <h1>Atualizar filme (PATCH)</h1>
+  <textarea id="json" placeholder='{"problem":"no_title","items":[{"id":1614,"imdb":"tt3450650"}]}'></textarea>
+  <p>
+    <label><input type="checkbox" id="dry"> Só simular (não envia para a API)</label>
+    <button id="run">Processar</button>
+  </p>
+  <pre id="log"></pre>
+
+<script>
+const log = document.getElementById('log');
+const add = (text, cls) => {
+  const s = document.createElement('div');
+  s.textContent = text; if (cls) s.className = cls;
+  log.appendChild(s);
+};
+
+document.getElementById('run').onclick = async (e) => {
+  const btn = e.target; btn.disabled = true; log.textContent = '';
+  try {
+    const res = await fetch('/run-update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        json: document.getElementById('json').value,
+        dryRun: document.getElementById('dry').checked
+      })
+    });
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n'); buffer = lines.pop();
+      for (const line of lines.filter(Boolean)) {
+        const r = JSON.parse(line);
+        if (r.ok) add(`✔ #${r.id} atualizado com sucesso`, 'ok');
+        else add(`✖ #${r.id || '?'}: ${r.error}`, 'err');
+        if (r.payload) add(JSON.stringify(r.payload, null, 2));
+      }
+    }
+    add('Concluído.');
+  } catch (err) {
+    add('Erro: ' + err.message, 'err');
+  } finally { btn.disabled = false; }
+};
+</script>
+</body>
+</html>
