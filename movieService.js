@@ -5,7 +5,7 @@ import { getMovie } from "./scraper.js";
 import { sendMovie } from "./sender.js";
 import { extractImdbId, parseMovie } from "./parser.js";
 
-const API_URL = process.env.NERDB_API_URL;
+const MOVIE_API_URL = process.env.NERDB_API_URL;
 const API_KEY = process.env.NERDB_API_KEY;
 
 export async function processMovie(targetUrl) {
@@ -15,7 +15,7 @@ export async function processMovie(targetUrl) {
 
     console.log(`⏳ Coletando dados de: ${targetUrl}...`);
 
-    const outputFolder = './downloads';
+    const outputFolder = './cache';
     await fs.mkdir(outputFolder, { recursive: true });
     const jsonPath = path.join(outputFolder, `${imdbId}.json`);
     
@@ -43,7 +43,7 @@ export async function processMovie(targetUrl) {
 
     try {
         if (!API_KEY) throw new Error('Variável de ambiente NERDB_API_KEY não definida.');
-        const response = await sendMovie(movieData, API_URL, API_KEY);
+        const response = await sendMovie(movieData, MOVIE_API_URL, API_KEY);
         console.log(response)
     } catch (error) {
         console.error('❌ Ocorreu um erro ao enviar os dados:', error.message);
