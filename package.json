@@ -1,10 +1,11 @@
 {
   "name": "imdb2nerdb",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Coleta dados de filmes no IMDb e envia para a API do nerdb.com.br",
+  "main": "src/cli.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node src/server/index.js",
+    "cli": "node src/cli.js"
   },
   "keywords": [],
   "author": "",
