@@ -53,6 +53,10 @@ export function parseMovie(html) {
         throw new Error('Estrutura do __NEXT_DATA__ mudou (aboveTheFoldData não encontrado).');
     }
 
+    if (atf.titleType.isSeries) {
+        throw new Error('O IMDb retornou uma série, mas a função parseMovie() só aceita filmes.');
+    }
+
     const locale = json.locale;
     const localizedTitle = atf.titleText?.text || '';
 
